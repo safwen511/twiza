@@ -1,0 +1,13 @@
+id,name,jebia,kind,capacity_m3h,length_m,loss_per_km
+s1,Seguia 1,j1,main,216,335,0.1
+s1a,Seguia 1-A,j1,branch,216,385,0.4
+s1b,Seguia 1-B,j1,branch,216,385,0.4
+s2,Seguia 2,j2,main,216,335,0.1
+s2a,Seguia 2-A,j2,branch,216,385,0.4
+s2b,Seguia 2-B,j2,branch,216,385,0.4
+s3,Seguia 3,j3,main,216,335,0.1
+s3a,Seguia 3-A,j3,branch,216,385,0.4
+s3b,Seguia 3-B,j3,branch,216,385,0.4
+s4,Seguia 4,j4,main,216,335,0.1
+s4a,Seguia 4-A,j4,branch,216,385,0.4
+s4b,Seguia 4-B,j4,branch,216,385,0.4

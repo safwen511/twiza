@@ -1,0 +1,5 @@
+.venv/
+cache/
+__pycache__/
+# sorties privees (drapeau "non recense" par parcelle) : ne jamais publier
+out/

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dev-dist/
+.env
+*.log
+video/frames/
+video/final/
+pitch/qa/
+report/pg/

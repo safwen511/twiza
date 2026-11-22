@@ -1,0 +1,34 @@
+@import '@fontsource/tajawal/400.css';
+@import '@fontsource/tajawal/500.css';
+@import '@fontsource/tajawal/700.css';
+@import 'maplibre-gl/dist/maplibre-gl.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { margin: 0; -webkit-font-smoothing: antialiased; }
+.num { font-variant-numeric: tabular-nums; }
+[dir='rtl'] { font-family: Tajawal, 'Noto Sans Arabic', Tahoma, sans-serif; }
+
+/* dashboard */
+.card { @apply rounded-2xl border border-line bg-panel; }
+.card-h { @apply flex items-center gap-2 px-5 pb-2 pt-4 text-xl font-semibold text-ink; }
+.chip { @apply inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel px-3 py-1.5 text-base text-ink2 hover:text-ink; }
+.chip-on { @apply border-ink bg-ink text-white hover:text-white; }
+.scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll::-webkit-scrollbar-thumb { background: #DEDBD4; border-radius: 8px; }
+.maplibregl-popup-content { background: #ffffff; color: #171717; border: 1px solid #DEDBD4; border-radius: 10px; padding: 12px 14px; font-size: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+.maplibregl-popup-tip { display: none; }
+.maplibregl-ctrl-attrib { background: rgba(255,255,255,.8) !important; color: #45423E; font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: #45423E; }
+input[type='range'].slider { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 6px; background: #DEDBD4; outline: none; }
+input[type='range'].slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #ffffff; border: 3px solid #171717; cursor: pointer; }
+input[type='range'].slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #ffffff; border: 3px solid #171717; cursor: pointer; }
+
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.55); } 100% { box-shadow: 0 0 0 18px rgba(255,255,255,0); } }
+.pulse { animation: pulse-ring 1.6s ease-out infinite; }
+@keyframes wave { 0%,100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
+.wave span { display: inline-block; width: 4px; height: 18px; margin: 0 1.5px; border-radius: 2px; background: currentColor; animation: wave .8s ease-in-out infinite; }
+.wave span:nth-child(2) { animation-delay: .15s; } .wave span:nth-child(3) { animation-delay: .3s; }
+@media (prefers-reduced-motion: reduce) { .pulse, .wave span { animation: none; } }

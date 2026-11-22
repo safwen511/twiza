@@ -1,0 +1,18 @@
+id,name,type,recorded,owner_id,flow_ls,depth_m,level_m,ec_ds_m,lat,lon
+f1,Forage GDA 1,gda,true,,75,210,28.4,3.1,33.77594,8.830064
+f2,Forage GDA 2,gda,true,,65,240,31.2,3.6,33.77594,8.835036
+w01,Puits 1,private,false,f33,12.4,94,35.2,6,33.777151,8.824179
+w02,Puits 2,private,false,f34,8.2,92,37.7,6.3,33.766567,8.84138
+w03,Puits 3,private,false,f35,12.9,84,32,3.5,33.778051,8.83065
+w04,Puits 4,private,false,f36,7.6,133,24.2,5.2,33.769883,8.825686
+w05,Puits 5,private,false,f37,10.4,130,24.9,5.9,33.774497,8.841303
+w06,Puits 6,private,true,f38,11.2,125,20.3,6,33.77476,8.822011
+w07,Puits 7,private,true,f39,11.6,64,26,6.2,33.779679,8.835079
+w08,Puits 8,private,false,f40,7.1,95,22.1,6,33.766211,8.828127
+w09,Puits 9,private,true,f28,8.3,136,40.3,5.5,33.767688,8.835209
+w10,Puits 10,private,true,f31,9.7,81,29.8,6.2,33.776838,8.840266
+w11,Puits 11,private,false,f05,7.9,103,28.8,6.2,33.765272,8.837737
+w12,Puits 12,private,false,f08,7.8,101,19.9,5.5,33.777797,8.82662
+w13,Puits 13,private,true,f11,11.3,110,19.2,3.8,33.778122,8.83675
+w14,Puits 14,private,true,f14,7.2,72,28.8,5,33.771759,8.841649
+w15,Puits 15,private,false,f17,8.2,97,40.1,5.8,33.768309,8.827561

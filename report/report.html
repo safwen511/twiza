@@ -1,0 +1,179 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>TWIZA — project report</title>
+<style>
+@page { size: A4; margin: 18mm 17mm 18mm 17mm; }
+* { box-sizing: border-box; }
+body { font-family: "Noto Sans", "DejaVu Sans", Arial, sans-serif; color: #171717; font-size: 10.5pt; line-height: 1.5; margin: 0; }
+h1 { font-size: 30pt; margin: 0; letter-spacing: -0.5px; }
+h2 { font-size: 16pt; margin: 22px 0 8px; break-after: avoid; }
+h2 span { color: #B5121B; margin-right: 8px; }
+h3 { font-size: 11.5pt; margin: 14px 0 4px; break-after: avoid; }
+p { margin: 0 0 8px; } ul { margin: 0 0 8px; padding-left: 18px; } li { margin-bottom: 3px; }
+.cover { background: #F7F6F3; border: 1px solid #DEDBD4; border-radius: 14px; padding: 26px 28px; margin-bottom: 18px; }
+.kicker { color: #B5121B; font-weight: 700; font-size: 9.5pt; letter-spacing: 1px; text-transform: uppercase; }
+.ar { font-size: 24pt; color: #B5121B; margin-left: 10px; }
+.lead { font-size: 12.5pt; margin-top: 10px; }
+.muted { color: #6F6B66; } .small { font-size: 9pt; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
+.stat { border: 1px solid #DEDBD4; border-radius: 10px; padding: 10px 12px; background: #fff; break-inside: avoid; }
+.stat b { display: block; font-size: 14.5pt; line-height: 1.2; margin-bottom: 3px; } .stat span { font-size: 8.8pt; color: #45423E; }
+.teal { color: #1C7A89; } .green { color: #37795D; } .red { color: #B5121B; }
+table { border-collapse: collapse; width: 100%; margin: 6px 0 10px; font-size: 9.6pt; break-inside: avoid; }
+th { background: #171717; color: #fff; text-align: left; padding: 6px 8px; font-weight: 600; }
+td { border-bottom: 1px solid #DEDBD4; padding: 6px 8px; vertical-align: top; }
+td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+figure { margin: 10px 0 12px; break-inside: avoid; } figure img { width: 100%; border: 1px solid #DEDBD4; border-radius: 8px; display: block; }
+figcaption { font-size: 8.8pt; color: #6F6B66; margin-top: 4px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } .phones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.box { background: #F7F6F3; border: 1px solid #DEDBD4; border-radius: 10px; padding: 10px 14px; margin: 8px 0 12px; break-inside: avoid; }
+.warn { border-color: #B5121B; background: #fdf3f4; }
+code { font-family: "DejaVu Sans Mono", monospace; font-size: 9pt; background: #F1EFEA; padding: 1px 4px; border-radius: 3px; }
+.flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 8px 0 12px; }
+.flow div { border: 1px solid #1C7A89; background: #eef6f7; border-radius: 8px; padding: 8px; font-size: 9pt; break-inside: avoid; }
+.flow b { display: block; font-size: 10.5pt; }
+</style></head><body>
+
+<div class="cover">
+  <div class="kicker">KIZUNA 2026 · Tunisia × Japan · Water</div>
+  <h1>TWIZA <span class="ar" lang="ar">تويزة</span></h1>
+  <p class="lead">Community water sharing for the oasis of Souk Lahad (Kebili): every farmer knows their water turn, every crop gets the water it needs, and total pumping stays under a safe limit for the aquifer.</p>
+  <p class="muted"><i>Twiza</i> is the collective effort of Tunisian villages: people gather to help each other harvest the crop, build a house, clean the canals. TWIZA applies the same idea to water. Japan knows it too: farmer-run Land Improvement Districts (土地改良区) have shared canal water for generations, by rotation in dry years (番水, <i>bansui</i>). <i>Twiza</i> and <i>kizuna</i> (絆, the bond between people) name the same thing.</p>
+  <p class="small muted">Project report · 22 November 2026 · Prototype built during the KIZUNA 2026 hackathon. All community data is synthetic; the weather (Open-Meteo) and the satellite imagery (Sentinel-2) are real.</p>
+</div>
+
+<div class="box" style="background:#fff"><b style="font-size:15pt">From 35 % over the aquifer's safe limit to 6 % under it</b><br><span class="muted">when 70 % of the community's wells join (simulation: 18,666 → 12,936 m³/day, safe limit 13,800).</span></div>
+<div class="stats">
+  <div class="stat"><b class="teal">−19 to −31 %</b><span>water pumped, depending on how wasteful today's practice is assumed to be</span></div>
+  <div class="stat"><b class="green">Same crops, 17 % less water</b><span>95 % of crop need covered, like a fixed nouba in the same week</span></div>
+  <div class="stat"><b>71 % vs 60 %</b><span>of need for the worst-off farmer in a week with a power cut</span></div>
+  <div class="stat"><b class="red">≈ 1.1 MWh/day</b><span>of pumping energy avoided at 70 % adoption</span></div>
+</div>
+<p class="small muted">Simulation results on a synthetic pilot community (40 farmers, 63 plots, 17 wells) with real July 2026 weather. They are not field measurements. Reproduce with <code>npx tsx data/baseline.ts</code>.</p>
+
+<h2><span>1</span>The problem</h2>
+<p>Souk Lahad is an oasis delegation near Chott el Jerid. Farmers grow date palms (Deglet Nour) with vegetables and alfalfa underneath, on water from the Complexe Terminal aquifer, which is over-pumped and getting saltier.</p>
+<ul>
+  <li><b>Turns are fixed and on paper.</b> The traditional <i>nouba</i> gives each farmer a fixed time on the canal. It does not follow the weather, the crop or the salinity, and it is often felt as unfair.</li>
+  <li><b>Nobody sees the aquifer.</b> No one in the community knows how much is pumped in a day or how close that is to what the aquifer can sustain.</li>
+  <li><b>Many private wells are unrecorded.</b> Their owners pump outside any coordination and avoid anything that looks like monitoring, for fear of fines.</li>
+  <li><b>Failures are handled by word of mouth.</b> A broken canal or a dry well leaves some farmers without water and nobody re-organises the day.</li>
+</ul>
+<div class="box"><b>Objective.</b> Group the farmers of one community, orchestrate who irrigates when, give each farm the right water for its crops, keep total pumping under a safe daily limit, and bring the owners of unrecorded wells into the same system with a path to regularization.</div>
+
+<h2><span>2</span>How we solved it</h2>
+<p>The water network is modelled as a graph of three kinds of infrastructure: <b>wells</b> (the GDA's collective boreholes and private wells), <b>jebias</b> (storage basins) and <b>seguias</b> (canals, concrete mains and earth branches). On top of it sit four parts.</p>
+<table>
+  <tr><th style="width:24%">Part</th><th>What it does</th></tr>
+  <tr><td><b>Farmer app</b><br><span class="muted small">mobile PWA</span></td><td>Tunisian Arabic (derja), right to left, French toggle. Big icons, colour codes (green = your turn, grey = not your turn, red = problem), a listen button. Screens: today, advice, swap my turn, report a problem, my well, regularization helper, SMS preview.</td></tr>
+  <tr><td><b>Community dashboard</b><br><span class="muted small">desktop, FR / EN</span></td><td>Map of wells, jebias, seguias and plots on a Sentinel-2 basemap; replay of the day; Gantt of turns; aquifer gauge with a scenario slider; proactive and reactive alerts with the decision taken; KPIs; assistant.</td></tr>
+  <tr><td><b>Water planner</b><br><span class="muted small">deterministic, tested</span></td><td>Computes every turn from crop need, salinity, canal losses, storage and the aquifer limit. Re-plans when something changes and logs what changed and why. It is not a language model.</td></tr>
+  <tr><td><b>Satellite pipeline</b><br><span class="muted small">Python</span></td><td>Finds irrigated land on a real Sentinel-2 scene (NDVI), estimates its water use and compares it with the registry of recorded wells.</td></tr>
+</table>
+
+<h3>The chain, from borehole to aquifer</h3>
+<div class="flow">
+  <div><b>1 Boreholes</b>pump only what the day's plan needs, never more than the cap</div>
+  <div><b>2 Jebias</b>store the water overnight and buffer the day</div>
+  <div><b>3 Seguias</b>carry one turn at a time; seepage and travel time are counted</div>
+  <div><b>4 Plots</b>receive the volume their crops need, in a known order</div>
+  <div><b>5 Aquifer</b>total pumping is checked against the safe daily limit</div>
+</div>
+
+<h3>The planner's rules</h3>
+<ul>
+  <li><b>Need (FAO-56):</b> <code>need = Kc × ET0 × area ÷ efficiency</code>, palms and understory crops separately, with the forecast ET0 of the next three days.</li>
+  <li><b>Salinity (FAO-29):</b> a leaching share <code>LR = ECw / (5·ECe − ECw)</code> is added when the water is salty.</li>
+  <li><b>Hydraulics:</b> borehole flow, jebia storage, seguia capacity, seepage per km and travel time.</li>
+  <li><b>Aquifer, two numbers:</b> the safe limit for the whole community is <b>13,800 m³/day</b>. Inside it, the collective network (the GDA's boreholes, the part the planner controls) has its own cap of <b>10,800 m³/day</b>; the rest is the room left for private wells pumping their crop need. The planner never exceeds the 10,800.</li>
+  <li><b>Community rule:</b> palms first (they must survive), then any shortage is shared evenly by everyone.</li>
+  <li><b>Re-plan:</b> a farmer report, a sensor anomaly, a swap or a forecast change triggers a new plan; turns already finished never change.</li>
+</ul>
+<p>The AI layer around the planner is deliberately modest: explainable anomaly detection on sensor series (sudden level drop, rising salinity, leak by mass balance), rule-based advice phrased in derja and French, and an assistant that can read the data but can only <i>propose</i> changes; the planner decides.</p>
+
+<figure><img src="map-crop.png"><figcaption>The map and the aquifer gauge with 70 % of wells joined: chain from boreholes to aquifer, order of the turns on the plots, recorded wells with their pumping, effect on the aquifer.</figcaption></figure>
+
+<h2><span>3</span>What a farmer and the committee see</h2>
+<div class="phones">
+  <figure><img src="../screenshots/03-farmer-mohamed-today.png"><figcaption>Today: "not your turn", next turn tomorrow 04:00–06:30, the neighbour irrigating now.</figcaption></figure>
+  <figure><img src="../screenshots/04e-farmer-mohamed-after-report.png" style="max-height:118mm;object-fit:cover;object-position:top"><figcaption>After a report: the canal is closed for a check and the day is re-planned.</figcaption></figure>
+  <figure><img src="../screenshots/06d-farmer-mohamed-advice.png"><figcaption>Advice in derja: the heat wave makes the turn 20 minutes longer.</figcaption></figure>
+</div>
+<figure><img src="../screenshots/05f-dashboard-gantt-swap.png"><figcaption>Turns of the day per seguia, with the canal closure, the swap between two farmers and the re-plan log (before and after for every turn).</figcaption></figure>
+
+<h2><span>4</span>How efficient it is</h2>
+<p>All figures below come from the running prototype on the synthetic pilot community, on the demo day of 14 July 2026 (real weather: 42 °C, ET0 8.7 mm).</p>
+<h3>Aquifer</h3>
+<table>
+  <tr><th>Share of wells in TWIZA</th><th>Wells joined</th><th>Community pumping</th><th>vs safe limit (13,800 m³/day)</th></tr>
+  <tr><td>0 % (today, no coordination)</td><td class="n">0 / 17</td><td class="n">18,666 m³/day</td><td class="n red"><b>135 %</b></td></tr>
+  <tr><td>35 %</td><td class="n">6 / 17</td><td class="n">14,566 m³/day</td><td class="n">106 %</td></tr>
+  <tr><td>70 %</td><td class="n">12 / 17</td><td class="n">12,936 m³/day</td><td class="n green"><b>94 %</b></td></tr>
+  <tr><td>100 %</td><td class="n">17 / 17</td><td class="n">12,082 m³/day</td><td class="n green">88 %</td></tr>
+</table>
+<ul>
+  <li>At 70 % adoption the community pumps <b>5,730 m³/day less</b> (−31 %) and passes under the safe limit. In the table the limit is respected from 60 % adoption (97 %).</li>
+  <li>The peak of the groundwater stress index falls by <b>27 %</b>. Without coordination the daily limit is reached at 14:30; at 70 % it is not reached.</li>
+</ul>
+<h3>Does the result depend on the baseline we chose? Yes, so we tested it</h3>
+<p>"Today's practice" is an assumption: fixed collective turns deliver 1.3 × the real need and a private well pumps 12 h/day. The table shows the saving at 70 % adoption under milder assumptions.</p>
+<table>
+  <tr><th>Collective turns today</th><th>Private wells today</th><th>Pumping today</th><th>vs safe limit</th><th>With TWIZA at 70 %</th><th>Saving</th></tr>
+  <tr><td>1.3 × need (reference)</td><td>12 h/day</td><td class="n">18,666</td><td class="n">135 %</td><td class="n">12,936</td><td class="n"><b>−31 %</b></td></tr>
+  <tr><td>1.3 × need</td><td>8 h/day</td><td class="n">16,624</td><td class="n">120 %</td><td class="n">12,317</td><td class="n">−26 %</td></tr>
+  <tr><td>1.15 × need</td><td>12 h/day</td><td class="n">17,219</td><td class="n">125 %</td><td class="n">12,936</td><td class="n">−25 %</td></tr>
+  <tr><td>1.15 × need</td><td>8 h/day</td><td class="n">15,177</td><td class="n">110 %</td><td class="n">12,317</td><td class="n"><b>−19 %</b></td></tr>
+  <tr><td>1.0 × need (turns already exact)</td><td>8 h/day</td><td class="n">13,730</td><td class="n">99 %</td><td class="n">12,317</td><td class="n">−10 %</td></tr>
+</table>
+<p>With a much milder baseline (1.15 × and 8 h/day) the community is still over the limit today and still passes under it with TWIZA, saving 19 %. Even if collective turns already matched the need exactly, sizing private pumping to the crop saves 10 %.</p>
+<h3>Crops and fairness, against a traditional fixed nouba</h3>
+<p>We replayed the same seven days, power cut on both boreholes included, under a model of the paper nouba: same order, fixed clock slots sized once for the season at 1.3 × the need, no re-planning (a slot without water is lost).</p>
+<table>
+  <tr><th>Same week, collective network</th><th>Crop need covered</th><th>Fairness (Jain index)</th><th>Worst-off farmer</th><th>Water released</th></tr>
+  <tr><td>Traditional fixed nouba</td><td class="n">95.2 %</td><td class="n">0.986</td><td class="n">60 % of need</td><td class="n">70,626 m³</td></tr>
+  <tr><td><b>TWIZA planner</b></td><td class="n">95.0 %</td><td class="n">0.990</td><td class="n"><b>71 % of need</b></td><td class="n"><b>58,777 m³ (−17 %)</b></td></tr>
+</table>
+<ul>
+  <li>TWIZA covers the <b>same share of crop need with 17 % less water</b>. It does not make crops better off than a generous fixed turn; it stops the over-delivery.</li>
+  <li>The fairness index is Jain's index over each farm's share of need received (1 = everybody equal). During the power cut TWIZA gave every affected farmer the same share (palms 62 %, understory suspended); under fixed slots the farmers whose slot fell in the outage lost it. The worst-off farmer ends the week at <b>71 %</b> of need instead of 60 %.</li>
+  <li>Canal losses are visible for the first time: <b>5.3 %</b> of the water released, 509 m³ on the demo day.</li>
+</ul>
+<h3>Energy</h3>
+<p>Pumping one cubic metre takes about <b>0.19 kWh</b> here (lift of about 35 m including drawdown, pump and motor efficiency 50 %; both assumed). The 5,730 m³/day avoided at 70 % adoption are therefore about <b>1.1 MWh per day</b>, around <b>130 MWh over a 120-day summer</b>, taken off the grid in the season when it fails. The planner also fills the jebias at night, so the canals keep running through a daytime power cut.</p>
+<h3>Resilience</h3>
+<table>
+  <tr><th style="width:30%">Event</th><th>What the system did</th></tr>
+  <tr><td>Farmer reports "no water"</td><td>Canal closed 60 min for a check, the two remaining turns shifted by 60 min, volumes kept, the farmers concerned notified.</td></tr>
+  <tr><td>Two farmers swap turns</td><td>Slots exchanged, each keeps their own volume, the planner re-checks the limit.</td></tr>
+  <tr><td>Heat wave forecast (+20 % ET0)</td><td>Turns lengthened; palms served at 100 %, understory at 65 %; the collective network stops exactly at its own 10,800 m³ cap (inside the 13,800 community limit).</td></tr>
+  <tr><td>Borehole dry</td><td>Remaining turns served from the jebias and the other borehole; next day palms 83 % for everybody, understory suspended.</td></tr>
+</table>
+<h3>Verification</h3>
+<ul>
+  <li><b>21 automated tests</b> pass: the limit is never exceeded, palms are served first, shortages are spread evenly, a swap keeps volumes, a re-plan never changes the past, and the anomaly detector finds exactly the three planted events.</li>
+  <li>The <b>8-step demo script</b> is replayed in a headless browser against the running app: 21 checks pass.</li>
+  <li>The satellite pipeline ran on a real scene (Sentinel-2, 6 July 2026, 0.7 % cloud): <b>1,231 ha</b> of irrigated land detected around Souk Lahad.</li>
+</ul>
+
+<h2><span>5</span>Unrecorded wells and regularization</h2>
+<p>The synthetic community has 15 private wells: 6 recorded and 9 unrecorded. TWIZA treats them as part of the solution: a well that joins is told how long to pump for its crop instead of pumping all day, and the owner gets a checklist to regularize (as described in the project brief: law of 27 October 2026, wells dug before 10 December 2024, flat 3,500 TND, deadline 31 December 2027, implementing rules still pending).</p>
+<div class="box"><b>Privacy first.</b> By default the dashboard never places an unrecorded well on the map: the committee sees how many have joined, their total pumping and the effect on the aquifer, and the satellite layer is aggregated on hexagons of about 0.7 km². This is what lets their owners join without fear. Showing them on the map (red, turning green when they join) exists as an <b>option the community can choose to switch on</b>; it is off in the demo. Until that switch is turned on, the server does not send those wells to the dashboard at all; an automated test suite checks every community endpoint for it.</div>
+
+<h2><span>6</span>Limits</h2>
+<ul>
+  <li><b>Synthetic community.</b> Farmers, plots, wells, sensors and incidents are generated. The results show that the method works on a plausible community, not what it will save in Souk Lahad.</li>
+  <li><b>Chosen limits and baselines.</b> The safe daily limit (13,800 m³/day), the "traditional" over-pumping and the model of the fixed nouba are assumptions; section 4 shows how the results move with them. A real limit needs a hydrogeological study.</li>
+  <li><b>Energy.</b> The kWh figure uses an assumed lift and efficiency, not a metered pump.</li>
+  <li><b>Stress map.</b> It is an index, not a groundwater model.</li>
+  <li><b>Satellite.</b> NDVI shows vegetation, not wells; the water estimate uses assumed crop coefficients; the registry it is compared with is synthetic.</li>
+  <li><b>Not run:</b> the Claude-powered assistant and advice rewriting compile but were not exercised, because no API key was available. The demo uses the templated answers.</li>
+  <li><b>No real SMS, no login.</b> The SMS screen is a preview and the farmer picker is a demo control.</li>
+</ul>
+
+<h2><span>7</span>Next steps</h2>
+<ul>
+  <li><b>Who runs it:</b> the GDA itself. It already manages the turns and collects the water fee; the CRDA would be the technical partner for the meters and for setting the safe limit.</li>
+  <li><b>Pilot:</b> one GDA in Souk Lahad for one irrigation season, with real plots and meters on its boreholes (the planner already consumes sensor series).</li>
+  <li><b>Reach:</b> an SMS gateway and Arabic voice so farmers without a smartphone get their turn.</li>
+  <li><b>Calibrate:</b> set the safe limit with hydrogeologists and replace the assumed crop values with field data.</li>
+</ul>
+<p class="small muted">Run it: <code>npm install &amp;&amp; npm run dev</code> in the project folder, then open http://localhost:5173/ (dashboard) and /farmer (phone app). Details and all assumptions: README.md, section "Hypothèses".</p>
+</body></html>
