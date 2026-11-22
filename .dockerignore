@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+app/dist
+satellite/.venv
+satellite/cache
+satellite/out
+video
+pitch
+report
+screenshots
+e2e/out
+.env
+.git
+*.jpeg

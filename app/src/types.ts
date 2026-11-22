@@ -2,7 +2,7 @@
 import type { DayPlan, Jebia, ReplanEntry, Seguia, Turn, Txt } from '../../server/src/types'
 
 export type { DayPlan, Jebia, ReplanEntry, Seguia, Turn, Txt }
-export type DLang = 'fr' | 'en'
+export type { DLang } from './i18n'
 export type FLang = 'ar' | 'fr'
 
 export interface NetFarmer { id: string; first: string; last: string; firstAr: string; lastAr: string; lang: FLang; smartphone: boolean }
@@ -47,6 +47,9 @@ export interface Live {
   kpis: Kpis
   weekly: { farmerId: string; name: string; need: number; got: number; pct: number; turns: number }[]
   flags: { heat: boolean; rain: boolean }
+  admin: boolean
+  unrecordedLayer: boolean
+  unrecorded: { count: number }
 }
 export interface Scenario {
   limit: number; wells: number; shares: number[]
@@ -55,7 +58,8 @@ export interface Scenario {
   unrecorded: { count: number; joined: number[]; q: number[] }
   grid: { points: [number, number][]; dd: number[][]; sal: number[] }
 }
-export interface Trends { rows: { date: string; f1Level: number; f2Level: number; privLevel: number; f1Ec: number; f2Ec: number; privEc: number }[] }
+export interface Trends { dates: string[]; wells: { id: string; name: string; type: 'gda' | 'private'; level: number[]; ec: number[]; drop: boolean; rising: boolean }[] }
+export interface Zone { blurred: true; jitterM: [number, number]; points: { id: string; lon: number; lat: number }[] }
 
 // ---- farmer ----
 export interface TurnView {

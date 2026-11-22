@@ -112,12 +112,55 @@ Values (Kc, ECe, efficiency, limits) are in [`server/src/config.ts`](server/src/
 - **Assistant** (`assistant.ts`): Claude Messages API with read-only tools (schedule, weekly deficits, wells, alerts, KPIs, farmer, re-plan log). Its only write tool records a *proposal* for the committee; the planner decides. Without a key, keyword templates answer the common questions in French, English, derja (Latin or Arabic script).
 - **Scenario slider** (`scenario.ts`): wells join in a fixed order (GDA boreholes, recorded private wells, then the others). A joined well pumps the crop need; a well outside TWIZA pumps the traditional volume.
 
-### Unrecorded wells: private by default
+### Unrecorded wells: privacy mode
 
-- **Default (strict):** the server never sends an unrecorded well, its plot, its coordinates or its name to the dashboard. They exist only as counts, totals and hexagon aggregates. `server/test/privacy.test.ts` checks every community endpoint and the assistant tools for it.
-- **Option the community can choose:** the "Puits non déclarés" switch on the map (`POST /api/demo/unrecorded`) makes the server send them; they then appear in red and turn green when they join. "Réinitialiser" switches it back off.
-- The satellite output is aggregated on H3 hexagons (small ones masked), the stress map spreads unrecorded pumping over its hexagon, and a farmer sees the sensors of their own well without any location.
-- The before/after video was recorded with the option on, to tell the story of those wells joining.
+- **The real position of an unrecorded well never leaves the server**, in any mode: not its coordinates, not its plot, not its name, not its own volume. The dashboard gets counts, zone totals and the hexagon layer (H3 level 8, about 0.7 km², hexagons with fewer than 3 areas masked).
+- **Admin / CRDA demo mode** (Demo menu only). Only in that mode can a layer of unrecorded wells be switched on, in the Satellite view, and it is off by default even there. The points are **jittered 300 to 500 m on the server**, each kept at least 300 m away from every real unrecorded well, stable between requests (so they cannot be averaged), without label or volume. A banner says "Mode démo : positions floutées, jamais partagées."
+- **Tests.** `server/test/privacy.test.ts` (API level) and `e2e/privacy.mjs` (browser: every API response and every map source) fail if a real coordinate appears or if the layer is reachable outside admin mode. Both pass on the dev server and on the production build.
+- A farmer sees the sensors of their own well, without any location.
+
+## Deploy on your own domain
+
+The server keeps each visitor's demo session in memory, so it needs a long-running process: a VPS with Docker fits, Vercel does not.
+
+```bash
+cp .env.example .env        # set DOMAIN=twiza.yourdomain.tn (its DNS record must point to the server)
+docker compose up -d --build
+```
+
+- One container runs the API and serves the built app; Caddy in front obtains the HTTPS certificate for `DOMAIN` automatically.
+- Without Docker: `npm ci && npm run build && PORT=8787 npm run start -w server`, behind any reverse proxy.
+- `GET /api/health` answers `{ ok, sessions, assistant }`.
+- Every visitor starts from the same seed, in their own session (kept in the browser, sent as the `x-twiza-session` header). Reports, swaps and re-plans stay in that session. "Réinitialiser la démo" resets it; all sessions are dropped every night at 03:00 server time and when the server restarts.
+- Security: strict Content-Security-Policy, no cookies, rate limits per IP (API, writes, assistant), validated inputs, 1 MB body limit.
+
+## Connect Claude (assistant and advice)
+
+The AI area is ready: set the key and restart, nothing else to change.
+
+```bash
+# .env
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-opus-5-5      # any current Claude model id
+ASSISTANT_PER_MINUTE=12              # caps per visitor IP: on a public link every question costs money
+ASSISTANT_PER_DAY=200
+```
+
+- `GET /api/assistant/status` returns `{ mode: "claude" | "templates", model }`; the Assistant page shows it as a badge.
+- With a key, Claude answers with read-only tools over the visitor's session (schedule, weekly deficits, wells, alerts, KPIs, one farmer, re-plan log) and can only *propose* a change; the planner decides. Farmer advice is rephrased by Claude, and a rewrite that changes a number is rejected.
+- Without a key, or if the API fails, the prepared templates answer, so the demo never breaks.
+- Code: `server/src/assistant.ts`. This path compiles but has not been run against the API (no key was available).
+
+## Tests
+
+```bash
+npm test                      # 29 unit tests: planner, anomaly detector, privacy, sessions, i18n completeness
+BASE=http://localhost:5173 npm run e2e    # browser tests against a running app (dev or production build)
+```
+
+Lighthouse on the production build (22 Nov): dashboard 100 / 100 / 100 (performance, accessibility, best practices, desktop preset), farmer app 99 / 100 / 100 (mobile).
+
+`e2e/smoke.mjs` (layout at 1440×900 and 1280×800), `e2e/privacy.mjs`, `e2e/demo.mjs` (the guided jury demo, step by step, and session isolation), `e2e/crawl.mjs` (every route, every control: fails on a console error or a dead click). They need `playwright-core` (installed) and a Chromium binary (`CHROME=/path/to/chrome`).
 
 ## Hypothèses
 

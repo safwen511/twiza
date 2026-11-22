@@ -1,0 +1,48 @@
+// The guided "Démo jury" played for real, step by step, plus the check that another visitor is not affected.
+import { BASE, OUT, launch, watch, ok, finish, session } from './lib.mjs'
+const b = await launch(); const errs = []
+const sid = session()
+const p = await b.newPage({ viewport: { width: 1440, height: 900 } }); watch(p, errs, 'dash')
+await p.goto(`${BASE}/?s=${sid}`, { waitUntil: 'domcontentloaded' })
+await p.waitForSelector('[data-testid=map-card]'); await p.mouse.move(700, 450); await p.waitForTimeout(5000)
+const txt = async sel => (await p.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim()
+const phone = () => p.frameLocator('[data-testid=phone] iframe')
+const next = async () => { await p.locator('[data-testid=guide-next]').click(); await p.waitForTimeout(3500) }
+
+await p.locator('[data-testid=demo-menu]').click(); await p.locator('[data-testid=demo-guided]').click(); await p.waitForTimeout(3500)
+ok('1 satellite view, pumping above the limit', (await p.locator('[data-testid=status-pill]').getAttribute('data-over')) === 'true' && (await p.getByRole('button', { name: 'Satellite', exact: true }).getAttribute('aria-pressed')) === 'true', await txt('[data-testid=status-pill]'))
+await p.screenshot({ path: `${OUT}demo-1.png` })
+await next()
+ok('2 slider at 70 %: under the limit', (await p.locator('[data-testid=status-pill]').getAttribute('data-over')) === 'false', `${await txt('[data-testid=status-pill]')} · ${await txt('[data-testid=scenario-total]')}`)
+await p.screenshot({ path: `${OUT}demo-2.png` })
+await next()
+ok('3 Mohamed: not his turn, tomorrow 04:00, Ali now', /اليوم موش نوبتك/.test(await phone().locator('[data-testid=status]').innerText()) && /غدوة من 04:00/.test(await phone().locator('[data-testid=next]').innerText()) && /علي/.test(await phone().locator('[data-testid=neighbour]').innerText()))
+await next()
+ok('4 report: reactive alert with a decision', /Pas d'eau dans la seguia — Seguia 2/.test(await txt('[data-testid=alerts]')), (await txt('[data-testid=alerts]')).slice(0, 160))
+ok('4 report: Mohamed\'s screen turns red', (await phone().locator('[data-testid=hero]').getAttribute('data-status')) === 'red')
+await p.screenshot({ path: `${OUT}demo-4.png` })
+await next()
+ok('5 swap: Mohamed irrigates today', /اليوم/.test(await phone().locator('[data-testid=next]').innerText()), await phone().locator('[data-testid=next]').innerText())
+ok('5 swap: shown on the Gantt and in the log', (await p.locator('[data-testid=gantt] [data-turn]').count()) > 8 && /Échange de tours/.test(await txt('[data-testid=log]')))
+await next()
+ok('6 heat wave: proactive alert', /vague de chaleur/i.test(await txt('[data-testid=alerts]')))
+ok('6 heat wave: advice in derja on the phone', /سخانة/.test(await phone().locator('[data-testid=advice]').innerText()))
+await next()
+await p.waitForFunction(() => document.querySelectorAll('[data-testid=chat] [data-role=assistant]').length >= 1, null, { timeout: 60000 })
+const ans = await p.locator('[data-testid=chat] [data-role=assistant]').last().innerText()
+ok('7 assistant answers with names and numbers', /\d+ ?%/.test(ans) && /m³|m3/.test(ans), ans.replace(/\n/g, ' / ').slice(0, 140))
+await next()
+const reg = await phone().locator('[data-testid=reg]').innerText()
+ok('8 regularization helper and privacy statement', /3500/.test(reg) && /2027/.test(reg) && /من غير موافقتك/.test(await phone().locator('[data-testid=privacy]').innerText()))
+ok('8 guide is on step 8/8 with a caption', /8\/8/.test(await txt('[data-testid=guide]')) && (await txt('[data-testid=guide-caption]')).length > 20)
+
+// another visitor, another session: nothing of the above happened for them
+const q = await b.newPage({ viewport: { width: 1440, height: 900 } }); watch(q, errs, 'visitor2')
+await q.goto(`${BASE}/?s=${session()}`, { waitUntil: 'domcontentloaded' }); await q.waitForSelector('[data-testid=kpis]'); await q.waitForTimeout(2500)
+const other = await q.evaluate(() => fetch('/api/live', { headers: { 'x-twiza-session': localStorage.getItem('twiza-session') } }).then(r => r.json()).then(l => ({ reports: l.reports.length, log: l.log.length, heat: l.flags.heat, time: l.now.hhmm })))
+ok('another visitor still sees the untouched demo', other.reports === 0 && other.log === 0 && !other.heat, JSON.stringify(other))
+// reset brings the first visitor back to the seed
+await p.locator('[data-testid=guide-quit]').click(); await p.locator('[data-testid=demo-menu]').click(); await p.locator('[data-testid=demo-reset]').click(); await p.waitForTimeout(2500)
+const mine = await p.evaluate(() => fetch('/api/live', { headers: { 'x-twiza-session': localStorage.getItem('twiza-session') } }).then(r => r.json()).then(l => l.reports.length + l.log.length))
+ok('"Réinitialiser la démo" restores the seed', mine === 0)
+await finish(b, errs)

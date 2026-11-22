@@ -11,6 +11,7 @@ import { addProposal, adviceSignature, hasPolished, setPolished, tools as data, 
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5'
 export const llmEnabled = () => !!process.env.ANTHROPIC_API_KEY
+export const llmModel = () => MODEL
 let client: Anthropic | null = null
 const api = () => (client ??= new Anthropic())
 

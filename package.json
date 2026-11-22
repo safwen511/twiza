@@ -12,11 +12,13 @@
     "test": "npm run test -w server",
     "build": "npm run build -w app",
     "satellite": "cd satellite && .venv/bin/python pipeline.py --hex-min-patches 3",
-    "start": "npm run build && npm run start -w server"
+    "start": "npm run build && npm run start -w server",
+    "e2e": "node e2e/smoke.mjs && node e2e/privacy.mjs && node e2e/demo.mjs && node e2e/crawl.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "concurrently": "^10.0.7",
+    "playwright-core": "^1.65.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

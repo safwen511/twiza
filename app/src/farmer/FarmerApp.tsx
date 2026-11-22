@@ -29,7 +29,7 @@ function speak(text: string, lang: FLang, done: () => void) {
 export default function FarmerApp() {
   const [id, setId] = useState(() => params.get('f') || localStorage.getItem('twiza-farmer') || 'f01')
   const [lang, setLang] = useState<FLang>(() => (localStorage.getItem('twiza-flang') as FLang) || 'ar')
-  const [tab, setTab] = useState<Tab>('home')
+  const [tab, setTab] = useState<Tab>(() => { const q = params.get('tab'); return q && ['home', 'advice', 'swap', 'report', 'more', 'well', 'reg', 'sms'].includes(q) ? (q as Tab) : 'home' })
   const [dev, setDev] = useState(false)
   const [farmers, setFarmers] = useState<NetFarmer[]>([])
   const taps = useRef<number[]>([])
@@ -64,13 +64,13 @@ export default function FarmerApp() {
         {sub ? (
           <button onClick={() => setTab('more')} aria-label="back" className="-ms-1 rounded-full p-1.5 active:bg-white/20">{t.dir === 'rtl' ? <ChevronRight size={26} /> : <ChevronLeft size={26} />}</button>
         ) : (
-          <button onClick={logoTap} aria-label="TWIZA" data-testid="logo" className="rounded-full bg-white p-0.5"><img src="/logo.png" alt="" className="h-9 w-9 rounded-full" /></button>
+          <button onClick={logoTap} aria-label="TWIZA" data-testid="logo" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white"><img src="/logo-96.png" alt="" width={40} height={40} className="h-10 w-10 rounded-full" /></button>
         )}
         <div className="flex-1 leading-tight">
           <div className="text-lg font-bold">تويزة <span className="text-sm font-normal opacity-80">TWIZA</span></div>
           <div className="text-xs opacity-85">{v ? `${name} · ${v.now.hhmm}` : ''}</div>
         </div>
-        <button onClick={() => setLang(lang === 'ar' ? 'fr' : 'ar')} data-testid="lang" className="rounded-full border border-white/50 px-3 py-1.5 text-sm font-semibold active:bg-white/20">{t.langBtn}</button>
+        <button onClick={() => setLang(lang === 'ar' ? 'fr' : 'ar')} data-testid="lang" className="min-h-[44px] rounded-full border border-white/50 px-4 text-sm font-semibold active:bg-white/20">{t.langBtn}</button>
       </header>
       {offline && <div className="flex items-center gap-2 bg-brand px-4 py-1.5 text-sm text-white"><WifiOff size={16} /> {t.offline}</div>}
 
@@ -241,7 +241,7 @@ function HomeScreen({ v, lang, refresh, go }: P & { refresh: () => void; go: (t:
 
 function TimelineRow({ x, lang }: { x: TurnView; lang: FLang }) {
   const t = F[lang]
-  const tone = x.state === 'active' ? 'bg-oasis text-white' : x.state === 'done' ? 'bg-stone-100 text-stone-500' : 'bg-white text-stone-900 border border-stone-300'
+  const tone = x.state === 'active' ? 'bg-oasis text-white' : x.state === 'done' ? 'bg-stone-100 text-stone-700' : 'bg-white text-stone-900 border border-stone-300'
   return (
     <li data-me={x.me} data-state={x.state} className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 ${tone} ${x.me ? 'ring-[3px] ring-palm' : ''}`}>
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${x.state === 'active' ? 'bg-white/25' : x.state === 'done' ? 'bg-stone-200' : 'bg-stone-100'}`}>
@@ -249,7 +249,7 @@ function TimelineRow({ x, lang }: { x: TurnView; lang: FLang }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-lg font-bold leading-tight">{nm(x, lang)}{x.me ? ` (${t.me})` : ''}</span>
-        <span className="block text-sm opacity-90">{x.state === 'done' ? t.done : x.state === 'active' ? t.active : t.pending}{x.flags.includes('delayed') ? ` · ${t.late}` : ''}{x.flags.includes('swap') ? ` · ${t.swapped}` : ''}</span>
+        <span className="block text-sm">{x.state === 'done' ? t.done : x.state === 'active' ? t.active : t.pending}{x.flags.includes('delayed') ? ` · ${t.late}` : ''}{x.flags.includes('swap') ? ` · ${t.swapped}` : ''}</span>
       </span>
       <span dir="ltr" className="num text-lg font-bold">{x.start < 0 ? '—' : `${hhmm(x.start)} – ${hhmm(x.end)}`}</span>
     </li>

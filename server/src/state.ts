@@ -1,6 +1,8 @@
-// TWIZA — live state of the community (in memory).
+// TWIZA — S().live state of the community (in memory).
 // The planner decides; this module only feeds it events and keeps the log.
 
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { CONFIG, CROPS, SITE } from './config.js'
 import { daily, leakBalance, risingTrend, suddenStep } from './anomaly.js'
@@ -40,7 +42,7 @@ const fullName = (f?: Farmer) => (f ? `${f.first} ${f.last}` : '?')
 const T = (fr: string, en: string, ar = ''): Txt => ({ fr, en, ar: ar || fr })
 const n0 = (v: number) => Math.round(v).toLocaleString('fr-FR').replace(/ /g, ' ')
 
-// ---------- types of the live state ----------
+// ---------- types of the S().live state ----------
 export type ReportType = 'seguia_broken' | 'well_dry' | 'no_water' | 'leak'
 export interface Alert {
   id: string
@@ -82,30 +84,75 @@ export interface SwapReq {
 export interface Notif { id: string; farmerId: string; kind: 'swap_request' | 'swap_answer' | 'replan' | 'report' | 'advice'; date: string; minute: number; text: Txt; swapId?: string }
 export interface Proposal { id: string; date: string; minute: number; text: string; status: 'to_review' }
 
-// ---------- clock (simulated, real weather day) ----------
-let clock = { date: CONFIG.demoDate as string, minute: CONFIG.demoMinute as number, real: Date.now(), speed: 1 }
+// ---------- S().clock (simulated, real weather day) ----------
 export function now() {
-  const abs = absMin(clock.date, clock.minute) + ((Date.now() - clock.real) / 60000) * clock.speed
+  const abs = absMin(S().clock.date, S().clock.minute) + ((Date.now() - S().clock.real) / 60000) * S().clock.speed
   const di = Math.floor(abs / 1440)
-  return { date: new Date(di * 86400000).toISOString().slice(0, 10), minute: abs - di * 1440, abs, speed: clock.speed }
+  return { date: new Date(di * 86400000).toISOString().slice(0, 10), minute: abs - di * 1440, abs, speed: S().clock.speed }
 }
 export function setClock(p: { date?: string; minute?: number; speed?: number }) {
   const n = now()
-  clock = { date: p.date ?? n.date, minute: p.minute ?? n.minute, real: Date.now(), speed: p.speed ?? clock.speed }
-  live.version++
+  S().clock = { date: p.date ?? n.date, minute: p.minute ?? n.minute, real: Date.now(), speed: p.speed ?? S().clock.speed }
+  S().live.version++
 }
 const stamp = () => {
   const n = now()
   return { date: n.date, minute: Math.floor(n.minute / CONFIG.stepMin) * CONFIG.stepMin }
 }
 
-// ---------- live state ----------
+// ---------- sessions: every visitor has their own demo ----------
+// Reports, swaps and re-plans stay in the visitor's session, so one visitor cannot break the demo for the next.
+// All sessions start from the same seed and are dropped every night.
+interface Session {
+  id: string
+  clock: { date: string; minute: number; real: number; speed: number }
+  live: ReturnType<typeof fresh>
+  planCache: Map<string, DayPlan>
+  admin: boolean
+  showUnrecorded: boolean
+  touched: number
+}
+const als = new AsyncLocalStorage<Session>()
+const sessions = new Map<string, Session>()
+let SEED: Alert[] = []
+const newSession = (id: string): Session => ({
+  id,
+  clock: { date: CONFIG.demoDate, minute: CONFIG.demoMinute, real: Date.now(), speed: 1 },
+  live: fresh(),
+  planCache: new Map(),
+  admin: false,
+  showUnrecorded: false,
+  touched: Date.now(),
+})
+let fallback: Session | null = null
+const S = (): Session => als.getStore() ?? (fallback ??= newSession('public'))
+const MAX_SESSIONS = 400
+export function withSession<T>(id: string | undefined, fn: () => T): T {
+  const key = id && /^[A-Za-z0-9_-]{8,64}$/.test(id) ? id : 'public'
+  let sess = sessions.get(key)
+  if (!sess) {
+    if (sessions.size >= MAX_SESSIONS) {
+      const oldest = [...sessions.values()].sort((a, b) => a.touched - b.touched)[0]
+      sessions.delete(oldest.id)
+    }
+    sessions.set(key, (sess = newSession(key)))
+  }
+  sess.touched = Date.now()
+  return als.run(sess, fn)
+}
+/** nightly reset: every visitor starts again from the seed */
+export function resetAll() {
+  sessions.clear()
+  fallback = null
+}
+export const sessionCount = () => sessions.size
+
 let seq = 0
 const uid = (p: string) => `${p}${++seq}`
 const fresh = () => ({
   version: 1,
   events: [] as PlanEvent[],
-  alerts: [] as Alert[],
+  alerts: SEED.map(a => ({ ...a })) as Alert[],
   log: [] as ReplanEntry[],
   reports: [] as Report[],
   swaps: [] as SwapReq[],
@@ -115,20 +162,20 @@ const fresh = () => ({
   heat: false,
   rain: false,
 })
-let live = fresh()
 
 // ---------- plans ----------
 const refCache = new Map<string, DayPlan>()
-let planCache = new Map<string, DayPlan>()
-const allEvents = () => [...history.events, ...live.events]
+const allEvents = () => [...history.events, ...S().live.events]
 const reference = (date: string) => {
   let p = refCache.get(date)
   if (!p) refCache.set(date, (p = planDay(date, { network, weather, events: [] })))
   return p
 }
+const basePlans = new Map<string, DayPlan>()
 export function plan(date: string): DayPlan {
-  let p = planCache.get(date)
-  if (!p) planCache.set(date, (p = annotate(planDay(date, { network, weather, events: allEvents() }), reference(date))))
+  const cache = S().live.events.length ? S().planCache : basePlans
+  let p = cache.get(date)
+  if (!p) cache.set(date, (p = annotate(planDay(date, { network, weather, events: allEvents() }), reference(date))))
   return p
 }
 const horizon = () => {
@@ -157,8 +204,8 @@ function world() {
 function replan(events: PlanEvent[], cause: Txt): ReplanEntry {
   const dates = horizon()
   const before = dates.map(plan)
-  live.events.push(...events)
-  planCache = new Map()
+  S().live.events.push(...events)
+  S().planCache = new Map()
   const after = dates.map(plan)
   const changes = diffPlans(before, after)
   const s = stamp()
@@ -178,8 +225,8 @@ function replan(events: PlanEvent[], cause: Txt): ReplanEntry {
       `${changes.length} turn(s) re-planned: ${moved.length} shifted (end ${avg >= 0 ? '+' : ''}${avg} min on average), ${longer.length} lengthened, ${shorter.length} reduced. Planned pumping ${n0(pumped[0])} m³ today, ${n0(pumped[1])} m³ tomorrow (limit ${n0(CONFIG.collectiveCap)}).`,
     ),
   }
-  live.log.unshift(entry)
-  live.version++
+  S().live.log.unshift(entry)
+  S().live.version++
   // tell the farmers whose turn changed
   const told = new Set<string>()
   for (const c of changes) {
@@ -195,13 +242,13 @@ function replan(events: PlanEvent[], cause: Txt): ReplanEntry {
 }
 function notify(farmerId: string, kind: Notif['kind'], text: Txt, swapId?: string) {
   const s = stamp()
-  live.notifs.unshift({ id: uid('n'), farmerId, kind, text, swapId, ...s })
+  S().live.notifs.unshift({ id: uid('n'), farmerId, kind, text, swapId, ...s })
 }
 function alert(a: Omit<Alert, 'id' | 'date' | 'minute'> & { date?: string; minute?: number }) {
   const s = stamp()
   const al: Alert = { id: uid('a'), date: a.date ?? s.date, minute: a.minute ?? s.minute, ...a }
-  live.alerts.push(al)
-  live.version++
+  S().live.alerts.push(al)
+  S().live.version++
   return al
 }
 
@@ -300,7 +347,7 @@ function seedAlerts() {
       detail: T(`Pompage estimé de la communauté ${n0(base.total)} m³/j pour une limite sûre de ${n0(sc.limit)} m³/j (${Math.round(base.pct)} %).`, `Estimated community pumping ${n0(base.total)} m³/d for a safe limit of ${n0(sc.limit)} m³/d (${Math.round(base.pct)} %).`),
       decision: T(`Réseau collectif plafonné à ${n0(CONFIG.collectiveCap)} m³/j ; adhésion proposée aux puits privés (voir le curseur de scénario).`, `Collective network capped at ${n0(CONFIG.collectiveCap)} m³/d; private wells invited to join (see the scenario slider).`),
     })
-  live.version++
+  S().live.version++
 }
 
 export const REPORT_LABEL: Record<ReportType, Txt> = {
@@ -315,7 +362,7 @@ let scenarioCache: ReturnType<typeof buildScenario> | null = null
 export function scenario() {
   if (!scenarioCache) {
     const d = CONFIG.demoDate
-    scenarioCache = buildScenario(network, reference(d), weather[d] ?? 9, site, showUnrecorded)
+    scenarioCache = buildScenario(network, reference(d), weather[d] ?? 9, site, false)
   }
   return scenarioCache
 }
@@ -336,7 +383,7 @@ export function report(farmerId: string, type: ReportType, photo?: string) {
   const sid = mySeguia(farmerId)
   const sg = sid ? seguiaById.get(sid)! : null
   const rep: Report = { id: uid('r'), farmerId, type, seguiaId: sid, ...s, status: 'open', photo }
-  live.reports.unshift(rep)
+  S().live.reports.unshift(rep)
   const label = REPORT_LABEL[type]
   const cause = T(`Signalement de ${fullName(f)} : ${label.fr.toLowerCase()}${sg ? ` (${sg.name})` : ''}`, `Report from ${fullName(f)}: ${label.en.toLowerCase()}${sg ? ` (${sg.name})` : ''}`, `بلاغ من ${f.firstAr}: ${label.ar}`)
   const ownWell = network.wells.find(w => w.ownerId === farmerId)
@@ -362,7 +409,7 @@ export function report(farmerId: string, type: ReportType, photo?: string) {
   } else if (type === 'well_dry' && ownWell) {
     // a private well: nothing about it is shown to the community unless it is recorded
     icon = 'well'
-    live.events.push({ id: uid('e'), type: 'well_flow', ...s, wellId: ownWell.id, flowLs: 0, cause })
+    S().live.events.push({ id: uid('e'), type: 'well_flow', ...s, wellId: ownWell.id, flowLs: 0, cause })
     title = ownWell.recorded ? T(`${ownWell.name} à sec (signalé par ${fullName(f)})`, `${ownWell.name} dry (reported by ${fullName(f)})`) : T('Un puits privé signalé à sec', 'A private well reported dry')
     decision = T('Puits privé : pas d\'effet sur le réseau collectif. Propriétaire orienté vers le GDA pour un appoint.', 'Private well: no effect on the collective network. Owner directed to the GDA for a top-up.')
   } else {
@@ -410,21 +457,21 @@ export function requestSwap(from: string, to: string) {
   const f = farmerById.get(from)!
   const s = stamp()
   const req: SwapReq = { id: uid('sw'), from, to, plotA: a.plotId, dateA: a.date, plotB: b.plotId, dateB: b.date, status: 'pending', ...s }
-  live.swaps.unshift(req)
+  S().live.swaps.unshift(req)
   notify(to, 'swap_request', T(`${f.first} vous demande d'échanger votre tour (${hhmm(b.start)}) contre le sien (${hhmm(a.start)}).`, `${f.first} asks to swap turns.`, `${f.firstAr} يطلب يبدّل نوبتو معاك`), req.id)
-  live.version++
+  S().live.version++
   return req
 }
 
 export function answerSwap(id: string, accept: boolean) {
-  const req = live.swaps.find(s => s.id === id)
+  const req = S().live.swaps.find(s => s.id === id)
   if (!req || req.status !== 'pending') throw new Error('unknown swap')
   const from = farmerById.get(req.from)!
   const to = farmerById.get(req.to)!
   if (!accept) {
     req.status = 'refused'
     notify(req.from, 'swap_answer', T(`${to.first} a refusé l'échange.`, `${to.first} refused the swap.`, `${to.firstAr} ما قبلش التبديل`), id)
-    live.version++
+    S().live.version++
     return req
   }
   const find = (plotId: string, date: string) => plan(date).turns.find(t => t.plotId === plotId)
@@ -432,7 +479,7 @@ export function answerSwap(id: string, accept: boolean) {
   const b = find(req.plotB, req.dateB)
   if (!a || !b || turnState(a) !== 'pending' || turnState(b) !== 'pending') {
     req.status = 'refused'
-    live.version++
+    S().live.version++
     throw new Error('one of the turns has already started')
   }
   req.status = 'accepted'
@@ -459,12 +506,7 @@ export function demo(action: string) {
   const s = stamp()
   const D = s.date
   if (action === 'reset') {
-    live = fresh()
-    showUnrecorded = false
-    scenarioCache = null
-    planCache = new Map()
-    clock = { date: CONFIG.demoDate, minute: CONFIG.demoMinute, real: Date.now(), speed: 1 }
-    seedAlerts()
+    Object.assign(S(), newSession(S().id))
     return
   }
   if (action === 'heatwave') {
@@ -475,7 +517,7 @@ export function demo(action: string) {
     const after = plan(dates[0])
     const palms = after.turns.filter(t => !plotById.get(t.plotId)?.under)
     const extra = palms.length ? Math.round(palms.reduce((a, t) => a + (t.end - t.start) - ((before.turns.find(b => b.id === t.id)?.end ?? 0) - (before.turns.find(b => b.id === t.id)?.start ?? 0)), 0) / palms.length) : 0
-    live.heat = true
+    S().live.heat = true
     alert({
       kind: 'proactive', severity: 'warn', icon: 'heat', source: 'forecast',
       title: cause,
@@ -491,7 +533,7 @@ export function demo(action: string) {
     const before = horizon().map(plan).reduce((a, p) => a + p.released, 0)
     const entry = replan([{ id: uid('e'), type: 'forecast', ...s, et0Factor: { [d1]: CONFIG.rainFactor }, cause }], cause)
     const saved = before - horizon().map(plan).reduce((a, p) => a + p.released, 0)
-    live.rain = true
+    S().live.rain = true
     alert({
       kind: 'proactive', severity: 'info', icon: 'rain', source: 'forecast', title: cause, detail: entry.summary,
       decision: T(`Tours raccourcis ; ${n0(saved)} m³ économisés restent dans les jebias et dans la nappe.`, `Turns shortened; ${n0(saved)} m³ saved stay in the jebias and in the aquifer.`),
@@ -523,38 +565,69 @@ export function demo(action: string) {
     const evs: PlanEvent[] = []
     const w = world()
     for (const [sid, v] of w.loss) if (v > 0) evs.push({ id: uid('e'), type: 'leak', ...s, seguiaId: sid, extraLoss: 0, cause: T('Fuite réparée', 'Leak repaired') })
-    live.events = live.events.filter(e => !(e.type === 'block' && absMin(e.date, e.minute) + (e.durationMin ?? 0) > now().abs))
-    planCache = new Map()
+    S().live.events = S().live.events.filter(e => !(e.type === 'block' && absMin(e.date, e.minute) + (e.durationMin ?? 0) > now().abs))
+    S().planCache = new Map()
     replan(evs, T('Réparations terminées', 'Repairs done', 'التصليح كمل'))
-    for (const r of live.reports) r.status = 'resolved'
+    for (const r of S().live.reports) r.status = 'resolved'
   } else throw new Error('unknown action')
 }
 
 export function startRegularization(farmerId: string, step: string, on: boolean) {
-  const set = live.regularization.get(farmerId) ?? new Set<string>()
+  const set = S().live.regularization.get(farmerId) ?? new Set<string>()
   if (on) set.add(step)
   else set.delete(step)
-  live.regularization.set(farmerId, set)
-  live.version++
+  S().live.regularization.set(farmerId, set)
+  S().live.version++
 }
 export function addProposal(text: string) {
   const p: Proposal = { id: uid('pr'), ...stamp(), text, status: 'to_review' }
-  live.proposals.unshift(p)
-  live.version++
+  S().live.proposals.unshift(p)
+  S().live.version++
   return p
 }
 
 // ---------- read models ----------
-// Strict by default: an unrecorded well never leaves the server, it only exists in counts and aggregates.
-// The community can choose the committee view (setShowUnrecorded(true)): only then are they sent to the dashboard.
-let showUnrecorded = false
-export function setShowUnrecorded(v: boolean) {
-  showUnrecorded = v
-  scenarioCache = null
-  live.version++
-}
-const publicWell = (w: (typeof network.wells)[number]) => w.recorded || showUnrecorded
+// PRIVACY: an unrecorded well never leaves the server. Not its position, not its plot, not its name, not its
+// own volume. The dashboard only gets counts, zone totals and hexagon aggregates.
+// The only exception is the "Admin / CRDA demo" mode, where a layer of JITTERED points can be requested
+// (see unrecordedZone below): the frontend never receives a real coordinate, in any mode.
+const publicWell = (w: (typeof network.wells)[number]) => w.recorded
 const publicPlot = (p: (typeof network.plots)[number]) => p.kind === 'collective' || (p.wellId != null && publicWell(wellById.get(p.wellId)!))
+
+export function setAdmin(on: boolean) {
+  S().admin = on
+  if (!on) S().showUnrecorded = false
+  S().live.version++
+}
+export function setUnrecordedLayer(on: boolean) {
+  if (!S().admin) throw new Error('admin mode required')
+  S().showUnrecorded = on
+  S().live.version++
+}
+// each unrecorded well is moved 300-500 m in a fixed random direction. The salt lives only in this process,
+// and the offset is stable, so repeated requests cannot be averaged to recover the real position.
+const SALT = randomBytes(16).toString('hex')
+const HIDDEN = network.wells.filter(w => !w.recorded)
+const metres = (a: { lon: number; lat: number }, b: { lon: number; lat: number }) => Math.hypot((a.lon - b.lon) * 111320 * Math.cos((a.lat * Math.PI) / 180), (a.lat - b.lat) * 111320)
+const JITTER = HIDDEN.map(w => {
+  // try directions until the blurred point is at least 300 m away from EVERY real unrecorded well, not only its own
+  let best = { sort: 0, lon: 0, lat: 0, clear: -1 }
+  for (let k = 0; k < 64; k++) {
+    const h = createHash('sha256').update(`${SALT}:${w.id}:${k}`).digest()
+    const angle = (h.readUInt32BE(0) / 2 ** 32) * 2 * Math.PI
+    const dist = 300 + (h.readUInt32BE(4) / 2 ** 32) * 200
+    const p = { lat: +(w.lat + (dist * Math.cos(angle)) / 111320).toFixed(5), lon: +(w.lon + (dist * Math.sin(angle)) / (111320 * Math.cos((w.lat * Math.PI) / 180))).toFixed(5) }
+    const clear = Math.min(...HIDDEN.map(x => metres(p, x)))
+    if (clear > best.clear) best = { sort: h.readUInt32BE(8), ...p, clear }
+    if (clear >= 300) break
+  }
+  return best
+}).sort((a, b) => a.sort - b.sort).map((p, i) => ({ id: `zone-${i + 1}`, lon: p.lon, lat: p.lat }))
+/** admin mode only, layer switched on only: blurred positions, no identity, no per-well volume */
+export function unrecordedZone() {
+  if (!S().admin || !S().showUnrecorded) return null
+  return { blurred: true, jitterM: [300, 500], points: JITTER }
+}
 
 /** static description of the network — only what the community may see */
 export function publicNetwork() {
@@ -624,7 +697,7 @@ function kpis() {
     cap: p.cap,
     farmersActive: network.farmers.filter(f => f.active).length,
     farmersTotal: network.farmers.length,
-    regularizationFiles: [...live.regularization.values()].filter(s => s.size > 0).length,
+    regularizationFiles: [...S().live.regularization.values()].filter(s => s.size > 0).length,
     turnsToday: p.turns.length,
     turnsDone: p.turns.filter(t => turnState(t, n) === 'done').length,
   }
@@ -638,7 +711,7 @@ export function liveState() {
   const today = plan(n.date)
   const step = Math.min(288, Math.floor(n.minute / CONFIG.stepMin))
   return {
-    version: live.version,
+    version: S().live.version,
     now: { date: n.date, minute: Math.floor(n.minute), speed: n.speed, hhmm: hhmm(n.minute) },
     weather: weatherDays.filter(d => d.date >= addDays(n.date, -1) && d.date <= addDays(n.date, 4)).map(d => ({ ...d, factor: w.factor.get(d.date) ?? 1 })),
     plans: horizon().slice(0, 3).map((d, i) => slim(plan(d), i === 0)),
@@ -653,14 +726,17 @@ export function liveState() {
       const s = sensors.wells[x.id]
       return { id: x.id, flowLs: flow, ecDs: w.ec.get(x.id) ?? x.ecDs, levelM: s ? s.level[s.level.length - 1] : x.levelM, status: flow <= 0 ? 'dry' : 'ok' }
     }),
-    alerts: [...live.alerts].sort((a, b) => absMin(b.date, b.minute) - absMin(a.date, a.minute) || (a.id < b.id ? 1 : -1)),
-    log: live.log.slice(0, 15),
-    reports: live.reports.map(r => ({ ...r, photo: undefined, hasPhoto: !!r.photo })),
-    swaps: live.swaps,
-    proposals: live.proposals,
+    alerts: [...S().live.alerts].sort((a, b) => absMin(b.date, b.minute) - absMin(a.date, a.minute) || (a.id < b.id ? 1 : -1)),
+    log: S().live.log.slice(0, 15),
+    reports: S().live.reports.map(r => ({ ...r, photo: undefined, hasPhoto: !!r.photo })),
+    swaps: S().live.swaps,
+    proposals: S().live.proposals,
     kpis: kpis(),
     weekly: weekly(),
-    flags: { heat: live.heat, rain: live.rain },
+    flags: { heat: S().live.heat, rain: S().live.rain },
+    admin: S().admin,
+    unrecordedLayer: S().admin && S().showUnrecorded,
+    unrecorded: { count: network.wells.filter(w => !w.recorded).length },
   }
 }
 
@@ -668,15 +744,14 @@ export function trends() {
   const off = (24 - (((sensors.startHour % 24) + 24) % 24)) % 24
   const days = Math.floor((sensors.hours - off) / 24)
   const dates = Array.from({ length: days }, (_, i) => new Date(Math.floor((sensors.startHour + off + i * 24) / 24) * 86400000).toISOString().slice(0, 10))
-  const pub = network.wells.filter(publicWell)
-  const series = (k: 'level' | 'ec') => Object.fromEntries(pub.map(w => [w.id, daily(sensors.wells[w.id][k].slice(off)).map(v => +v.toFixed(2))]))
-  const level = series('level')
-  const ec = series('ec')
-  const priv = pub.filter(w => w.type === 'private')
-  const meanOf = (s: Record<string, number[]>) => dates.map((_, i) => +(priv.reduce((a, w) => a + s[w.id][i], 0) / Math.max(1, priv.length)).toFixed(2))
+  const d = (id: string, k: 'level' | 'ec') => daily(sensors.wells[id][k].slice(off)).map(v => +v.toFixed(2))
   return {
     dates,
-    rows: dates.map((d, i) => ({ date: d, f1Level: level.f1[i], f2Level: level.f2[i], privLevel: meanOf(level)[i], f1Ec: ec.f1[i], f2Ec: ec.f2[i], privEc: meanOf(ec)[i] })),
+    wells: network.wells.filter(publicWell).map(w => {
+      const level = d(w.id, 'level')
+      const ec = d(w.id, 'ec')
+      return { id: w.id, name: w.name, type: w.type, level, ec, drop: !!suddenStep(level, 3, 1.5), rising: !!risingTrend(ec, 10) }
+    }),
   }
 }
 
@@ -736,7 +811,7 @@ export function farmerView(farmerId: string) {
   }
   const neighbour = active && !active.me ? active : null
   return {
-    version: live.version,
+    version: S().live.version,
     synthetic: true,
     now: { date: n.date, minute: Math.floor(n.minute), hhmm: hhmm(n.minute) },
     farmer: { id: f.id, first: f.first, last: f.last, firstAr: f.firstAr, lastAr: f.lastAr, lang: f.lang, smartphone: f.smartphone },
@@ -750,12 +825,12 @@ export function farmerView(farmerId: string) {
     timeline,
     advice: advice(farmerId, nx, myWell),
     candidates: swapCandidates(farmerId).map(c => ({ ...view(c.turn) })),
-    swapsIn: live.swaps.filter(s => s.to === farmerId && s.status === 'pending').map(s => ({ ...s, first: farmerById.get(s.from)!.first, firstAr: farmerById.get(s.from)!.firstAr })),
-    swapsOut: live.swaps.filter(s => s.from === farmerId).slice(0, 3).map(s => ({ ...s, first: farmerById.get(s.to)!.first, firstAr: farmerById.get(s.to)!.firstAr })),
-    reports: live.reports.filter(r => r.farmerId === farmerId).map(r => ({ id: r.id, type: r.type, date: r.date, minute: r.minute, status: r.status })),
-    notifs: live.notifs.filter(x => x.farmerId === farmerId).slice(0, 6),
+    swapsIn: S().live.swaps.filter(s => s.to === farmerId && s.status === 'pending').map(s => ({ ...s, first: farmerById.get(s.from)!.first, firstAr: farmerById.get(s.from)!.firstAr })),
+    swapsOut: S().live.swaps.filter(s => s.from === farmerId).slice(0, 3).map(s => ({ ...s, first: farmerById.get(s.to)!.first, firstAr: farmerById.get(s.to)!.firstAr })),
+    reports: S().live.reports.filter(r => r.farmerId === farmerId).map(r => ({ id: r.id, type: r.type, date: r.date, minute: r.minute, status: r.status })),
+    notifs: S().live.notifs.filter(x => x.farmerId === farmerId).slice(0, 6),
     myWell,
-    regularization: { needed: !!well && !well.recorded, done: [...(live.regularization.get(farmerId) ?? [])] },
+    regularization: { needed: !!well && !well.recorded, done: [...(S().live.regularization.get(farmerId) ?? [])] },
     sms: sms(f, nx, neighbour, jebia?.id.slice(1) ?? '', block ? block.to : null),
   }
 }
@@ -777,7 +852,7 @@ const polished = new Map<string, { ar: string; fr: string }>()
 export const adviceSignature = (a: Advice) => `${a.key}:${JSON.stringify(a.n)}`
 export function setPolished(sig: string, text: { ar: string; fr: string }) {
   polished.set(sig, text)
-  live.version++
+  S().live.version++
 }
 export const hasPolished = (sig: string) => polished.has(sig)
 
@@ -873,8 +948,13 @@ export const tools = {
     return f ? `${f.first} ${f.last}` : null
   },
   replanLog() {
-    return live.log.slice(0, 8).map(l => ({ when: `${l.date} ${hhmm(l.minute)}`, cause: l.cause.fr, summary: l.summary.fr }))
+    return S().live.log.slice(0, 8).map(l => ({ when: `${l.date} ${hhmm(l.minute)}`, cause: l.cause.fr, summary: l.summary.fr }))
   },
 }
 
-seedAlerts()
+// the alerts every visitor starts with are computed once
+{
+  const tmp = newSession('seed')
+  als.run(tmp, seedAlerts)
+  SEED = tmp.live.alerts
+}

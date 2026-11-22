@@ -24,11 +24,17 @@ export default {
         warn: '#C77700',
         serious: '#D0575E',
         crit: '#B5121B',
+        // ---- dashboard design tokens (values live in src/tokens.css) ----
+        bg: 'var(--bg)', card: 'var(--card)', hair: 'var(--border)', fg: 'var(--fg)', fg2: 'var(--fg2)', dim: 'var(--dim)',
+        accent: 'var(--accent)', 'accent-soft': 'var(--accent-soft)',
+        ok: 'var(--ok)', 'ok-soft': 'var(--ok-soft)', caution: 'var(--caution)', 'caution-soft': 'var(--caution-soft)', danger: 'var(--danger)', 'danger-soft': 'var(--danger-soft)',
         // farmer app
         sand: '#F7F6F3',
         palm: '#1C7A89',
         oasis: '#37795D',
       },
+      fontSize: { 12: ['12px', '16px'], 14: ['14px', '20px'], 16: ['16px', '24px'], 20: ['20px', '28px'], 28: ['28px', '32px'] },
+      borderRadius: { card: '12px' },
       fontFamily: {
         sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Tajawal', 'sans-serif'],
         ar: ['Tajawal', 'Noto Sans Arabic', 'Tahoma', 'sans-serif'],

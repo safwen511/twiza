@@ -29,13 +29,13 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         // the farmer's phone does not need the desktop dashboard (map + charts)
-        globIgnores: ['**/Dashboard-*.js', 'data/**'],
+        globIgnores: ['**/Dashboard-*.js', '**/MapView-*.js', '**/MapView-*.css', '**/pages-*.js', 'data/**', 'og.png'],
         navigateFallbackDenylist: [/^\/api/],
         // the farmer keeps his last known turn when the network drops
         runtimeCaching: [{ urlPattern: /\/api\/farmer\//, handler: 'NetworkFirst', options: { cacheName: 'twiza-farmer', networkTimeoutSeconds: 4 } }],
       },
     }),
   ],
-  server: { port: 5173, host: true, proxy: { '/api': 'http://localhost:8787' } },
-  preview: { port: 5173, proxy: { '/api': 'http://localhost:8787' } },
+  server: { port: Number(process.env.VITE_PORT || 5173), host: true, proxy: { '/api': `http://localhost:${process.env.PORT || 8787}` } },
+  preview: { port: Number(process.env.VITE_PORT || 5173), proxy: { '/api': `http://localhost:${process.env.PORT || 8787}` } },
 })
